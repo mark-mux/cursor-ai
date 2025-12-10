@@ -70,6 +70,8 @@ class Tetris {
         this.dropCounter = 0;
         this.dropInterval = 1000; // milliseconds
         this.lastTime = 0;
+        this.particles = [];
+        this.flashAlpha = 0;
         
         this.canvas = document.getElementById('game-board');
         this.ctx = this.canvas.getContext('2d');
@@ -284,9 +286,11 @@ class Tetris {
     
     clearLines() {
         let linesCleared = 0;
+        const clearedRows = [];
         
         for (let row = BOARD_HEIGHT - 1; row >= 0; row--) {
             if (this.board[row].every(cell => cell !== 0)) {
+                clearedRows.push(row);
                 this.board.splice(row, 1);
                 this.board.unshift(Array(BOARD_WIDTH).fill(0));
                 linesCleared++;
@@ -308,14 +312,90 @@ class Tetris {
                 this.dropInterval = Math.max(100, 1000 - (this.level - 1) * 100);
             }
             
+            // Create celebratory effects
+            this.createCelebration(clearedRows, linesCleared);
+            
             this.updateScore();
         }
+    }
+    
+    createCelebration(clearedRows, linesCleared) {
+        // Flash effect
+        this.flashAlpha = 0.6;
+        
+        // Create particles for each cleared line
+        clearedRows.forEach(row => {
+            const y = row * BLOCK_SIZE;
+            for (let i = 0; i < BOARD_WIDTH; i++) {
+                const x = i * BLOCK_SIZE;
+                // Create multiple particles per block
+                for (let j = 0; j < 5; j++) {
+                    this.particles.push({
+                        x: x + BLOCK_SIZE / 2,
+                        y: y + BLOCK_SIZE / 2,
+                        vx: (Math.random() - 0.5) * 8,
+                        vy: (Math.random() - 0.5) * 8 - 2,
+                        life: 1.0,
+                        decay: 0.02 + Math.random() * 0.02,
+                        color: `hsl(${Math.random() * 360}, 100%, 60%)`,
+                        size: 3 + Math.random() * 4
+                    });
+                }
+            }
+        });
+    }
+    
+    updateParticles() {
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            const p = this.particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.3; // gravity
+            p.life -= p.decay;
+            
+            if (p.life <= 0) {
+                this.particles.splice(i, 1);
+            }
+        }
+        
+        // Fade flash effect
+        if (this.flashAlpha > 0) {
+            this.flashAlpha -= 0.05;
+            if (this.flashAlpha < 0) this.flashAlpha = 0;
+        }
+    }
+    
+    drawParticles() {
+        // Draw flash overlay
+        if (this.flashAlpha > 0) {
+            this.ctx.fillStyle = `rgba(255, 255, 255, ${this.flashAlpha})`;
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+        
+        // Draw particles
+        this.particles.forEach(p => {
+            this.ctx.save();
+            this.ctx.globalAlpha = p.life;
+            this.ctx.fillStyle = p.color;
+            this.ctx.beginPath();
+            this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.restore();
+        });
     }
     
     updateScore() {
         this.scoreElement.textContent = this.score;
         this.linesElement.textContent = this.lines;
         this.levelElement.textContent = this.level;
+        
+        // Add celebrate animation
+        [this.scoreElement, this.linesElement, this.levelElement].forEach(el => {
+            el.classList.remove('celebrate');
+            // Trigger reflow to restart animation
+            void el.offsetWidth;
+            el.classList.add('celebrate');
+        });
     }
     
     draw() {
@@ -333,6 +413,10 @@ class Tetris {
         
         // Draw grid
         this.drawGrid();
+        
+        // Update and draw particles
+        this.updateParticles();
+        this.drawParticles();
     }
     
     drawBoard() {
@@ -394,6 +478,10 @@ class Tetris {
     drawNextPiece() {
         if (!this.nextPiece) return;
         
+        // Properly clear the canvas first
+        this.nextCtx.clearRect(0, 0, this.nextCanvas.width, this.nextCanvas.height);
+        
+        // Draw background
         this.nextCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
         this.nextCtx.fillRect(0, 0, this.nextCanvas.width, this.nextCanvas.height);
         
